@@ -13,4 +13,16 @@
 #define RF 12 
 #define STATUS_SIG 7
 #define STATUS_AC 8
-
+#define host "localhost"
+#define user "root"
+#define password ""
+#define database "judgeonline"
+typedef struct {
+	int solution_id;
+	char user_id[30];
+	int problem_id,contest_id;
+	double time,memory;
+	double stime,ntime;
+	double run_t,run_m;
+	int language,result,num;
+}Submits;

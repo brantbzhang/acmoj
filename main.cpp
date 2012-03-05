@@ -1,20 +1,14 @@
 #include<stdlib.h>
 #include<mysql.h>
 #include<stdio.h>
-#define host "localhost"
-#define user "root"
-#define password ""
-#define database "judgeonline"
+#include<unistd.h>
+#include<string.h>
+#include<fcntl.h>
+#include<limits.h>
+#include<sys/types.h>
+#include<sys/stst.h>
+#define FIFO_NAME "/tmp/my_fifo"
 MYSQL my_connection;
-typedef struct {
-	int solution_id;
-	char user_id[30];
-	int problem_id,contest_id;
-	double time,memory;
-	double stime,ntime;
-	double run_t,run_m;
-	int language,result,num;
-}Submits;
 static bool dbconnected=false;
 inline void mysql_connection()
 {
@@ -32,23 +26,41 @@ inline void stop()
     if(dbconnected)mysql_close(&my_connection);
     exit(1);
 }
-inline bool check(Submits submit)
-{
-     
-}
 int main()
 {
+    pid_t child_pid;
+    child_pid=fork();
+    if(child_pid==-1)
+    {
+	perror("fork failed\n");
+	exit(EXIT_FAILURE);
+    }
+    else if(!child_pid)
+    {
+	execl("./client",NULL,NULL);
+    }
+    int fifo_fd;
+    char sql[300];
     Submits submit;
+    MYSQL_RES *res=NULL;
+    MYSQL_ROW row=NULL;
     mysql_connection();
+    mkfifo(FIFO_name,0777);
+    fifo_fd=open(FIFO_NAME,O_RDONLY);
+    if(fifo_fd==-1)
+    {
+	fprintf("stderr,"FIFO failed\n"");
+	exit(FAILURE);
+    }
+    sprintf(sql,"select solution_id,problem_id,user_id,contest_id,num,stime,ntime,language from solution where result="%d" order by solution_id limit 1",WAITING);
     while(true)
     {
-	if(check(submit))
+	if(mysql_query(&my_connection,sql)!=0)
 	{
-	    
+	    fprintf(stderr,"Mysql failed!\n");
 	}
-	else
-	{
-	    usleep(300*1000);
-	}
+	res=mysql_store_result(&my_connection);
+	
+	usleep(300*1000);
     }
 }
