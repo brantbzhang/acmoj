@@ -15,7 +15,6 @@ typedef struct {
 	double run_t,run_m;
 	int language,result,num;
 }Submits;
-
 static bool dbconnected=false;
 inline void mysql_connection()
 {
@@ -26,9 +25,30 @@ inline void mysql_connection()
 	dbconnected=true;
 	printf("connection success\n");
     }
-    else printf("connection faild\n");
+    else fprintf(stderr,"Database connection failure:%d,%s\n",mysql_errno(&my_connection),mysql_error(&my_connection));
+}
+inline void stop()
+{
+    if(dbconnected)mysql_close(&my_connection);
+    exit(1);
+}
+inline bool check(Submits submit)
+{
+     
 }
 int main()
 {
+    Submits submit;
     mysql_connection();
+    while(true)
+    {
+	if(check(submit))
+	{
+	    
+	}
+	else
+	{
+	    usleep(300*1000);
+	}
+    }
 }
