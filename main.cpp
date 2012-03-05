@@ -1,5 +1,5 @@
- #include<stdlib.h>
- #include<mysql.h>
+#include<stdlib.h>
+#include<mysql.h>
 #include<stdio.h>
 #define host "localhost"
 #define user "root"
