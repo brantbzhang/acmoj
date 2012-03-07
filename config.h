@@ -17,12 +17,5 @@
 #define user "root"
 #define password ""
 #define database "judgeonline"
-typedef struct {
-	int solution_id;
-	char user_id[30];
-	int problem_id,contest_id;
-	double time,memory;
-	double stime,ntime;
-	double run_t,run_m;
-	int language,result,num;
-}Submits;
+#define MAXPOSIX 4
+#define MAXPROBLEM 2000
