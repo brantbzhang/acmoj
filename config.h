@@ -19,3 +19,4 @@
 #define database "judgeonline"
 #define MAXPOSIX 4
 #define MAXPROBLEM 2000
+//#define MAXTXTSIZE 
