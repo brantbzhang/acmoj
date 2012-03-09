@@ -39,6 +39,7 @@ queue<Sumits>sumit;
 pthread_mutex_t work_mutex;
 sem_t bin_sem;
 int tid;
+int csafecall[512],jsafecall[512];
 
 inline void mysql_connection()
 {
@@ -55,6 +56,7 @@ inline void mysql_connection()
 	    exit(EXIT_FAILURE);
 	}
     }
+    
 }
 
 inline void stop()
@@ -282,18 +284,14 @@ inline bool judger(int getid,Submits *submit)
 	freopen(path,"r",stdin);
 	sprintf(path,"./tmp/%d.out",submit->solution_id);
 	freopen(path,"w",stdout);
-	struct rlimit tim,mem;
-	tim.rlim_cur=(int)submit->time/1000;
-	mem.rlim_cur=(int)*(submit->memory+1024)*1024;
+	struct rlimit tim;
+	tim.rlim_cur=(int)pinfo[submit->probelm_id].time/1000;
 	if(submit->language==3)
 	{
 	    tim.rlim_cur=tim.rlim_cur*3;
-	    mem.rlim_cur=mem.rlim_cur*3;
 	}
 	tim.rlim_max=timlim.rlim_cur;
-	mem.rlim_max=mem.rlim_cur;
 	setrlimit(RLIMIT_CPU,&tim);
-	setrlimit(RLIMIT_DATA,&mem);
 	sprintf(path,"./tmp/%d",submit->solution_id);
 	ptrace(PTRACE_TRACEME,0,NULL,NULL);
 	if(submit->language==3)
@@ -304,12 +302,16 @@ inline bool judger(int getid,Submits *submit)
 	{
 	    execl(path,NULL,NULL);
 	}
-	exit(1);
+	return false;
     }
-    int status;
+    int status,mem;
     bool flag=true;
     long syscallID;
     struct rusage,usage;
+    mem=(int)*pinfo[submit->probelm_id]*1024;
+    if(submit->language==3)mem=mem*2;
+    submit->result=AC;
+    submit->run_m=0;
     while(true)
     {
 	wait4(pid,&status,0,&usage);
@@ -384,6 +386,10 @@ inline void init()
     {
 	pinfo[i]->have=false;
     }
+    memset(csafecall,0,sizeof(csafecall));
+    memset(jsafecall,0,sizeof(jsafecall));
+    for(int i=0;SYS_C[i];i++)csafecall[SYS_C[i]]=1;
+    for(int i=0;SYS_J[i];i++)jsafecall[SYS_J[i]]=1;
 }
 
 inline  void get_pinfo(int problem_id)
