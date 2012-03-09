@@ -1,15 +1,21 @@
-#include<stdlib.h>
-#include<mysql.h>
 #include<stdio.h>
-#include<unistd.h>
+#include<stdlib.h>
 #include<string.h>
+#include<mysql.h>
+#include<unistd.h>
 #include<fcntl.h>
 #include<limits.h>
-#include<sys/types.h>
-#include<sys/stat.h>
-#include<queue>
 #include<pthread.h>
 #include<semaphore.h>
+#include<sys/user.h>
+#include<sys/ptrace.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<sys/wait.h>
+#include<sys/time.h>
+#include<sys/resource.h>
+#include<sys/reg.h>
+#include<queue>
 using namespace std;
 
 typedef struct {
@@ -266,6 +272,53 @@ void *thread_work(void *arg)
 
 inline bool judger(int getid,Submits *submit)
 {
+    pid_t pid;
+    fflush(stdin);
+    fflush(stdout);
+    if((pid=vfork())==0)
+    {
+	char path[300];
+	sprintf(path,"./data/%d/data.in",submit->probelm_id);
+	freopen(path,"r",stdin);
+	sprintf(path,"./tmp/%d.out",submit->solution_id);
+	freopen(path,"w",stdout);
+	struct rlimit tim,mem;
+	tim.rlim_cur=(int)submit->time/1000;
+	mem.rlim_cur=(int)*(submit->memory+1024)*1024;
+	if(submit->language==3)
+	{
+	    tim.rlim_cur=tim.rlim_cur*3;
+	    mem.rlim_cur=mem.rlim_cur*3;
+	}
+	tim.rlim_max=timlim.rlim_cur;
+	mem.rlim_max=mem.rlim_cur;
+	setrlimit(RLIMIT_CPU,&tim);
+	setrlimit(RLIMIT_DATA,&mem);
+	sprintf(path,"./tmp/%d",submit->solution_id);
+	ptrace(PTRACE_TRACEME,0,NULL,NULL);
+	if(submit->language==3)
+	{
+	    execlp("java",path,NULL);
+	}
+        else
+	{
+	    execl(path,NULL,NULL);
+	}
+	exit(1);
+    }
+    int status;
+    bool flag=true;
+    long syscallID;
+    struct rusage,usage;
+    while(true)
+    {
+	wait4(pid,&status,0,&usage);
+	if(WIFEXITED(status)||WIFSIGNALED(status))break;
+	if(flag)
+	{
+	    syscallID=ptrace(PTRACE_PEEKUSER,pid,NULL,NULL)
+	}
+    }
     
 }
 
