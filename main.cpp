@@ -15,31 +15,35 @@
 #include<sys/time.h>
 #include<sys/resource.h>
 #include<sys/reg.h>
-#include<queue>
-using namespace std;
+#include"config.h"
 
-typedef struct {
-	int solution_id;
-	char user_id[30];
-	int problem_id,contest_id;
-    //double time,memory;
-	double stime,ntime;
-	double run_t,run_m;
-	int language,result,num;
-}Submits;
-
-struct probleminfo
-{
-    double time,memory;
-    bool have;
-}pinfo[MAXPROBLEM];
 
 MYSQL my_connection[MAXPOSIX+1];
-queue<Sumits>sumit;
 pthread_mutex_t work_mutex;
 sem_t bin_sem;
-int tid;
+int tid,num;
 int csafecall[512],jsafecall[512];
+int head,end;
+Submits Q[200];
+
+inline void push(Submits submit)
+{
+    Q[end]=submit;
+    end=(end+1)%200;
+    num++;
+}
+
+inline bool  get_queue(Submits *submit)
+{
+    if(head!=end)
+    {
+	submit=&Q[head];
+	head=(head+1)%200;
+	num--;
+	return true;
+    }
+    return false;
+}
 
 inline void mysql_connection()
 {
@@ -61,7 +65,7 @@ inline void mysql_connection()
 
 inline void stop()
 {
-    for(i=0;i<=MAXPOSIX;i++)
+    for(int i=0;i<=MAXPOSIX;i++)
     {
 	mysql_close(&my_connection[i]);
     }
@@ -77,26 +81,26 @@ inline void update_status(int getid,int id,int st)
     return;
 }
 
-inline void update_result(int getid,Submits submit)
+inline void update_result(int getid,Submits *submit)
 {
-    update_submit_result();
-    if(submit->result==AC) update_user_problem_result();
+    update_submit_result(getid,submit);
+    if(submit->result==AC) update_user_problem_result(getid,submit);
     if(submit->contest_id!=0)
     {
-	update_contest_result();
+	update_contest_result(getid,submit);
     }
     return;
 }
 
-inline void update_submit_result(int getid,Submits submit)
+inline void update_submit_result(int getid,Submits *submit)
 {
     char sql[300];
-    sprintf(sql,"update solution set result='%d',time='%d',memory='%d' where solution_id='%d';",submit->result,(int)(submit->run_t*1000),(int)(submit->run_m*1024),submit->solution_id);
+    sprintf(sql,"update solution set result='%d',time='%d',memory='%d' where solution_id='%d';",submit->result,(int)(submit->run_t),(int)(submit->run_m),submit->solution_id);
     mysql_query(&my_connection[getid],sql);
     return;
 }
 
-inline void update_user_problem_result(int getid,Submits submit)
+inline void update_user_problem_result(int getid,Submits *submit)
 {
     char sql[300];
     MYSQL_RES *res;
@@ -105,7 +109,7 @@ inline void update_user_problem_result(int getid,Submits submit)
     mysql_query(&my_connection[getid],sql);
     sprintf(sql,"select  problem_id from solution where result='1' and user_id='%s' and problem_id'%d';",submit->user_id,submit->problem_id);
     mysql_query(&my_connection[getid],sql);
-    res=mysql_use_result(&connection[getid]);
+    res=mysql_use_result(&my_connection[getid]);
     if(!mysql_num_rows(res))
     {
 	sprintf(sql,"update users set solved=solved+1 where user_id='%s';",submit->user_id);
@@ -114,12 +118,12 @@ inline void update_user_problem_result(int getid,Submits submit)
     mysql_free_result(res);
 }
 
-inline void update_contest_result(int getid,Submits submit)
+inline void update_contest_result(int getid,Submits *submit)
 {
     char sql[300];
     MYSQL_RES *res;
     MYSQL_ROW row;
-    int IS_AC=-1,wrong=0;
+    int IS_AC=-1,Wrong=0;
     char pro='A'+submit->num;
     sprintf(sql,"select %c_time,%c_WrongSubmits from attend where contest_id='%d' and user_id='%s';",pro,pro,submit->contest_id,submit->user_id);
     mysql_query(&my_connection[getid],sql);
@@ -142,27 +146,17 @@ inline void update_contest_result(int getid,Submits submit)
     {
 	sprintf(sql,"update attend set %c_WrongSubmits=%c_WrongSubmits+1 where contest_id='%d' and user_id='%s';",pro,pro,submit->contest_id,submit->user_id);
 	mysql_query(&my_connection[getid],sql);
-	sprintf(sql,"update contest_result set submit=submit+1 where contest_is='%d' and num='%d';",submit->contest_is,submit->num);
+	sprintf(sql,"update contest_result set submit=submit+1 where contest_is='%d' and num='%d';",submit->contest_id,submit->num);
 	mysql_query(&my_connection[getid],sql);
     }
     return;
-}
-
-inline char get_letter(FILE *in)
-{
-    char a;
-    while(sscanf(in,"%c",&a)!=EOF)
-    {
-	if(a!='\n'&&a!=' '&&a!='\t'&&a!='\b'&&a!='\r')
-	    return a;
-    }
-    return -1;
 }
 
 inline bool is_letter(char a)
 {
     return a!='\n'&&a!=' '&&a!='\t'&&a!='\b'&&a!='\r'; 
 }
+
 inline char get_letter(FILE *in)
 {
     char a;
@@ -171,20 +165,20 @@ inline char get_letter(FILE *in)
 	if(is_letter(a))
 	    return a;
     }
-    return -1;
+    return char(NULL);
 }
 
 inline bool check(FILE *in1,FILE *in2)
 {
     char a,b,c;
-    bool PE=false;
+    bool PEflag=false;
     while(true)
     {
 	if(fscanf(in1,"%c",&a)==EOF)
 	{
 	    if(fscanf(in2,"%c",&b)==EOF)
 	    {
-		return PE?-1:1;
+		return PEflag?-1:1;
 	    }
 	    else if(is_letter(b))
 	    {
@@ -206,7 +200,7 @@ inline bool check(FILE *in1,FILE *in2)
 	}
 	if(a!=b)
 	{
-	    PE=true;
+	    PEflag=true;
 	    if(is_letter(a))
 	    {
 		if(is_letter(b))
@@ -232,36 +226,43 @@ inline bool check(FILE *in1,FILE *in2)
 
 inline void create_pthread()
 {
-    pthrea_t thread[MAxPOSIX];
-    for(i=0;i<MAXPOSIX;i++)
+    pthread_t thread[MAXPOSIX];
+    for(int i=0;i<MAXPOSIX;i++)
     {
 	tid++;
-	res=pthread_create(&(thread[i]),NULL,thread_work,(void *)NULL);
+	int res=pthread_create(&(thread[i]),NULL,thread_work,(void *)NULL);
 	if(res!=0)
 	{
 	    printf("Thread creat failed!\n");
 	    exit(EXIT_FAILURE);
 	}
-	slepp(2);
+	sleep(2);
     }
 }
 
 void *thread_work(void *arg)
 {
     int getid=tid;
-    Submits submit;
+    Submits *submit;
     char cmd[300];
     while(true)
     {
 	sem_wait(&bin_sem);
 	pthread_mutex_lock(&work_mutex);
-	if(q.empty())
+	if(num==0)
 	{
 	    exit(EXIT_FAILURE);
 	}
-	submit=q.front();q.pop();
+	get_queue(submit);
 	pthread_mutex_unlock(&work_mutex);
-	compile(getid,&submits)&&judger(getid,&submit);
+	submit->result=COMPLIERING;
+	update_status(getid,COMPLIERING,submit->solution_id);
+	if(!pinfo[submit->problem_id].have)
+	{
+	    get_pinfo(getid,submit->problem_id);
+	}
+	    
+	compile(getid,submit)&&judger(getid,submit);
 	update_result(getid,submit);
 	if(submit->language==3)
 	{
@@ -280,18 +281,22 @@ inline bool judger(int getid,Submits *submit)
     if((pid=vfork())==0)
     {
 	char path[300];
-	sprintf(path,"./data/%d/data.in",submit->probelm_id);
+	sprintf(path,"./data/%d/data.in",submit->problem_id);
 	freopen(path,"r",stdin);
 	sprintf(path,"./tmp/%d.out",submit->solution_id);
 	freopen(path,"w",stdout);
-	struct rlimit tim;
-	tim.rlim_cur=(int)pinfo[submit->probelm_id].time/1000;
+	struct rlimit tim,mem;
+	tim.rlim_cur=(int)pinfo[submit->problem_id].time/1000;
+	mem.rlim_cur=(int)(pinfo[submit->problem_id].memory)*1024;
 	if(submit->language==3)
 	{
 	    tim.rlim_cur=tim.rlim_cur*3;
+	    mem.rlim_max=mem.rlim_cur*3;
 	}
-	tim.rlim_max=timlim.rlim_cur;
+	tim.rlim_max=tim.rlim_cur;
+	mem.rlim_max=mem.rlim_cur;
 	setrlimit(RLIMIT_CPU,&tim);
+	setrlimit(RLIMIT_DATA,&mem);
 	sprintf(path,"./tmp/%d",submit->solution_id);
 	ptrace(PTRACE_TRACEME,0,NULL,NULL);
 	if(submit->language==3)
@@ -304,24 +309,103 @@ inline bool judger(int getid,Submits *submit)
 	}
 	return false;
     }
-    int status,mem;
+    int status,mem,nowmem,file,sig;
     bool flag=true;
     long syscallID;
-    struct rusage,usage;
-    mem=(int)*pinfo[submit->probelm_id]*1024;
+    struct rusage usage;
+    char path[300];
+    sprintf(path,"/proc/%d/statm",int(pid));
+    file=open(path,O_RDONLY);
+    mem=(int)(pinfo[submit->problem_id].memory*1024);
     if(submit->language==3)mem=mem*2;
     submit->result=AC;
     submit->run_m=0;
+    submit->run_t=0;
     while(true)
     {
 	wait4(pid,&status,0,&usage);
-	if(WIFEXITED(status)||WIFSIGNALED(status))break;
+	if(WIFEXITED(status))break;
+	if(WIFSIGNALED(status))
+	{
+	    sig=WTERMSIG(status);
+	    switch (sig)
+	    {
+	    case SIGXCPU : submit->result=TLE;break;
+	    case SIGFPE  :
+	    case SIGSEGV :submit->result=RE;break;
+	    default: submit->result=MLE;
+	    }
+	    break;
+	}
 	if(flag)
 	{
-	    syscallID=ptrace(PTRACE_PEEKUSER,pid,NULL,NULL)
+	    syscallID=ptrace(PTRACE_PEEKUSER,pid,4*ORIG_EAX,NULL);
+	    flag=true;
+	    if((submit->language==3)?(jsafecall[syscallID]==0):(csafecall[syscallID]==0))
+	    {
+		submit->result=RF;
+		ptrace(PTRACE_KILL,pid,NULL,NULL);
+		break;
+	    }
+	}
+	else flag=false;
+	nowmem=get_nowmem(file);
+	if(nowmem>mem)
+	{
+	    submit->result=MLE;
+	    ptrace(PTRACE_KILL,pid,NULL,NULL);
+	    break;
+	}
+	if(nowmem>submit->run_m)
+	{
+	    submit->run_m=nowmem;
+	}
+	ptrace(PTRACE_SYSCALL,pid,NULL,NULL);
+    }
+    if(submit->result==AC)
+    {
+	sprintf(path,"./tmp/%d.out",submit->solution_id);
+	FILE *a=fopen(path,"r");
+	sprintf(path,"./data/%d/data.out",submit->solution_id);
+	FILE *b=fopen(path,"r");
+	int tmp=check(a,b);
+	switch (tmp)
+	{
+	case 1  :submit->result=AC;break;
+	case -1 :submit->result=WA;break;
+	case 0  :submit->result=PE;
+	}
+	submit->run_t+=(usage.ru_utime.tv_sec*1000+usage.ru_utime.tv_usec/1000);
+	submit->run_t+=(usage.ru_stime.tv_sec*1000+usage.ru_stime.tv_usec/1000);
+	if(submit->run_t > (int)pinfo[submit->problem_id].time)
+	{
+	    submit->result=TLE;
 	}
     }
-    
+    if(submit->result!=AC)
+    {
+	submit->run_m=0;
+	submit->run_t=0;
+    }
+    update_result(getid,submit);
+    return true;
+}
+
+inline int get_nowmem(int file)
+{
+    char ss[25];
+    memset(ss,0,sizeof(ss));
+    pread(file,ss,sizeof(ss),0);
+    int i=0;
+    while(ss[i]!=' '&&ss[i])i++;
+    i++;
+    int a=0;
+    while(ss[i]!=' '&&ss[i])
+    {
+	a=a*10+(ss[i]-'0');
+	i++;
+    }
+    return a;
 }
 
 inline bool compile(int getid,Submits *submit)
@@ -330,7 +414,7 @@ inline bool compile(int getid,Submits *submit)
     MYSQL_ROW row=NULL;
     char sql[300],cmd[300],path[300];
     FILE *file;
-    sprintf(sql,"select source from source_code where solution_id='%d';",submit_solution_id);
+    sprintf(sql,"select source from source_code where solution_id='%d';",submit->solution_id);
     if(mysql_query(&my_connection[getid],sql))
     {
 	printf("%s\n",mysql_error(&my_connection[getid]));
@@ -355,7 +439,7 @@ inline bool compile(int getid,Submits *submit)
 	fprintf(file,"%s",row[0]);
 	fclose(file);
 	sprintf(cmd,"dos2unix ./tmp/%d.cpp",submit->solution_id);
-	sprintf(sql,"g++ ./tmp/%d.cpp -o ./tmp/%d -o0 -ansi -w 2> ./err/%d",submit->solution_id,submit->solution_id,submit_solution_id);
+	sprintf(sql,"g++ ./tmp/%d.cpp -o ./tmp/%d -o0 -ansi -w 2> ./err/%d",submit->solution_id,submit->solution_id,submit->solution_id);
     }
     if(system(cmd)==0&&system(sql)==0)	return true;
     submit->result=CE;
@@ -366,10 +450,9 @@ inline bool compile(int getid,Submits *submit)
 
 inline void init()
 {
-    tid=0;
+    tid=0;head=0;end=0;num=0;
     mysql_connection();
     create_pthread();
-    while(!q.empty())q.pop();
     int rs=pthread_mutex_init(&work_mutex,NULL);
     if(rs!=0)
     {
@@ -384,7 +467,7 @@ inline void init()
     }
     for(int i=0;i<MAXPROBLEM;i++)
     {
-	pinfo[i]->have=false;
+	pinfo[i].have=false;
     }
     memset(csafecall,0,sizeof(csafecall));
     memset(jsafecall,0,sizeof(jsafecall));
@@ -392,73 +475,66 @@ inline void init()
     for(int i=0;SYS_J[i];i++)jsafecall[SYS_J[i]]=1;
 }
 
-inline  void get_pinfo(int problem_id)
+inline  void get_pinfo(int getid,int problem_id)
 {
     MYSQL_RES *res;
     MYSQL_ROW sqlrow;
     char sql[300];
     sprintf(sql,"select time_limit,memory_limit from problem where problem_id='%d';",problem_id);
-    int rs=mysql_query(&my_connection[0],sql);
+    int rs=mysql_query(&my_connection[getid],sql);
     if(rs)
     {
-	printf("SELECT error: %s\n",mysql_error(&my_connection[0]));
+	printf("SELECT error: %s\n",mysql_error(&my_connection[getid]));
 	exit(EXIT_FAILURE);
     }
-    rs=mysql_use_result(&my_connection[0]);
+    res=mysql_use_result(&my_connection[getid]);
     if((sqlrow=mysql_fetch_row(res))==NULL)
     {
 	printf("Don't have problem %d\n",problem_id);
 	exit(EXIT_FAILURE);
     }
-    sscanf(row[0],"%lf",&pinfo[problem_id]->time);
-    sscanf(row[1],"%lf",&pinfo[problem_id]->memory);
+    sscanf(sqlrow[0],"%lf",&pinfo[problem_id].time);
+    sscanf(sqlrow[1],"%lf",&pinfo[problem_id].memory);
     mysql_free_result(res);
 }
 
 int main()
 {
-    int num,count=0;
+    int count=0;
     char sql[300];
     Submits submit;
     MYSQL_RES *res=NULL;
     MYSQL_ROW row=NULL;
     init();
-    sprintf(sql,"select solution_id,problem_id,user_id,contest_id,num,stime,ntime,language from solution where result="%d" order by solution_id",WAITING);
+    sprintf(sql,"select solution_id,problem_id,user_id,contest_id,num,stime,ntime,language from solution where result=WAITING order by solution_id limit 10");
     sleep(3);
     while(true)
     {
 	
 	if(mysql_query(&my_connection[0],sql)!=0)
 	{
-	    printf("%s\n",mysql_error(conn));
+	    printf("%s\n",mysql_error(&my_connection[0]));
 	}
-	rs=mysql_store_result(&my_connection[0]);
-	if(rs)
+	res=mysql_store_result(&my_connection[0]);
+	if(res)
 	{
 	    printf("mysql store failed!\n");
-	    eixt(EXIT_FAILURE);
+	    exit(EXIT_FAILURE);
 	}
 	count++;
 	while((row=mysql_fetch_row(res)))
 	{
-	    sscanf(row[0], "%d", &submit->solution_id);
-	    sscanf(row[1], "%d", &submit->problem_id);
-	    strcpy(submit->user_id, row[2]);
-	    sscanf(row[3], "%d", &submit->contest_id);
-	    sscanf(row[4], "%d", &submit->num);
-	    sscanf(row[5], "%lf", &submit->stime);
-	    sscanf(row[6], "%lf", &submit->ntime);
-	    sscanf(row[7], "%d", &submit->language);
-	    submit->result=COMPLIERING;
-	    update_status(COMPLIERING,submit->solution_id);
-	    if(!pinfo[submit->problem_id].have)
-	    {
-		get_pinfo(submit->problem_id);
-	    }
+	    sscanf(row[0], "%d", &submit.solution_id);
+	    sscanf(row[1], "%d", &submit.problem_id);
+	    strcpy(submit.user_id, row[2]);
+	    sscanf(row[3], "%d", &submit.contest_id);
+	    sscanf(row[4], "%d", &submit.num);
+	    sscanf(row[5], "%lf", &submit.stime);
+	    sscanf(row[6], "%lf", &submit.ntime);
+	    sscanf(row[7], "%d", &submit.language);
 	    pthread_mutex_lock(&work_mutex);
 	    sem_post(&bin_sem);
-	    q.push(sumit);
-	    num=q.size();
+	    push(submit);
 	    pthread_mutex_unlock(&work_mutex);
 	    count=0;
 	}
@@ -469,7 +545,7 @@ int main()
 	    count=0;
 	    for(int i=1;i<=MAXPOSIX;i++)
 	    {
-		mysql_query(&my_connection[i],";"):
+		mysql_query(&my_connection[i],";");
 	    }
 	}
     }
