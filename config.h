@@ -17,14 +17,14 @@
 #define user "root"
 #define password ""
 #define database "judgeonline"
-#define MAXPOSIX 4
+#define MAXPOSIX 8
 #define MAXPROBLEM 2000
 //#define MAXTXTSIZE 
 
 #include <sys/syscall.h>
 
-int  SYS_J[256]={SYS_rt_sigprocmask, SYS_futex, SYS_read, SYS_open, SYS_close, SYS_execve, SYS_access, SYS_brk, SYS_readlink, SYS_munmap, SYS_close, SYS_uname, SYS_clone, SYS_uname, SYS_mprotect, SYS_rt_sigaction, SYS_getrlimit,   SYS_getgid, SYS_geteuid, SYS_getegid, SYS_set_thread_area, SYS_set_tid_address, SYS_set_robust_list, SYS_exit_group, 0};
-int SYS_C[256]={SYS_read, SYS_uname, SYS_write, SYS_open, SYS_close, SYS_execve, SYS_access, SYS_brk, SYS_munmap, SYS_mprotect,  SYS_fstat, SYS_set_thread_area, 252,0};
+int  SYS_J[256]={SYS_rt_sigprocmask, SYS_futex, SYS_read, SYS_open, SYS_close, SYS_execve, SYS_access, SYS_brk, SYS_readlink, SYS_munmap, SYS_close, SYS_uname, SYS_clone, SYS_uname, SYS_mprotect, SYS_rt_sigaction, SYS_getrlimit,   SYS_getgid, SYS_geteuid, SYS_getegid, SYS_set_thread_area, SYS_set_tid_address, SYS_set_robust_list, SYS_exit_group, SYS_arch_prctl ,SYS_mmap,-1};
+int SYS_C[256]={SYS_read, SYS_uname, SYS_write, SYS_open, SYS_close, SYS_execve, SYS_access, SYS_brk, SYS_munmap, SYS_mprotect,  SYS_fstat, SYS_set_thread_area, SYS_exit_group,SYS_arch_prctl,SYS_mmap,-1};
 
 typedef struct {
 	int solution_id;
@@ -43,7 +43,7 @@ struct probleminfo
 }pinfo[MAXPROBLEM];
 
 inline void push(Submits *submit);
-inline bool get_queue(Submits *submit);
+inline void get_queue(Submits *submit);
 inline void mysql_connection();
 inline void stop();
 inline void update_status(int getid,int id,int st);
